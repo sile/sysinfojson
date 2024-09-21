@@ -5,9 +5,9 @@ sysinfojson
 [![Actions Status](https://github.com/sile/sysinfojson/workflows/CI/badge.svg)](https://github.com/sile/sysinfojson/actions)
 ![License](https://img.shields.io/crates/l/sysinfojson)
 
-Command-line tool that displays system information collected using [`sysinfo`] crate in JSON format.
+Command-line tool that displays system information collected using [sysinfo] crate in JSON format.
 
-[`sysinfo`]: https://crates.io/crates/sysinfo
+[sysinfo]: https://crates.io/crates/sysinfo
 
 ```console
 // Install.
@@ -53,7 +53,7 @@ $ sysinfojson system memory | jq .
   }
 }
 
-// Display process information (PID: 0).
+// Display process information (PID: 1).
 $ sysinfojson process 1 | jq .
 {
   "cmd": [],
