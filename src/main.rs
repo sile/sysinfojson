@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use sysinfo::{Components, Disks, Networks, System, Users};
+use sysinfo::{Components, Disks, Networks, Pid, ProcessRefreshKind, RefreshKind, System, Users};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, clap::ValueEnum)]
 enum SystemCategory {
@@ -46,9 +46,42 @@ fn main() {
                 Duration::from_millis(cpu_update_interval_ms as u64),
             )
         }
-        Args::Process { .. } => todo!(),
+        Args::Process { pid } => collect_process_info(pid),
     };
     println!("{output}");
+}
+
+fn collect_process_info(pid: u32) -> serde_json::Value {
+    let sys = System::new_with_specifics(
+        RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
+    );
+    let Some(proc) = sys.process(Pid::from_u32(pid)) else {
+        return serde_json::Value::Null;
+    };
+
+    serde_json::json!({
+        "name": proc.name().to_string_lossy(),
+        "cmd": proc.cmd().iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>(),
+        "exe": proc.exe(),
+        "cwd": proc.cwd(),
+        "root": proc.root(),
+        "memory": proc.memory(),
+        "virtual_memory": proc.virtual_memory(),
+        "parent": proc.parent().map(|p| p.as_u32()),
+        "session_id": proc.session_id().map(|p| p.as_u32()),
+        "tasks": proc.tasks().map(|pids| pids.iter().map(|p| p.as_u32()).collect::<Vec<_>>()),
+        "user_id": proc.user_id().map(|u| **u),
+        "effective_user_id": proc.effective_user_id().map(|u| **u),
+        "group_id": proc.group_id().map(|g| *g),
+        "effective_group_id": proc.effective_group_id().map(|g| *g),
+        "status": proc.status().to_string(),
+        "start_time": proc.start_time(),
+        "run_time": proc.run_time(),
+        "cpu_usage": proc.cpu_usage(),
+        "disk_usage": proc.disk_usage(),
+        "thread_kind": proc.thread_kind(),
+        "environ": proc.environ().iter().map(|e| e.to_string_lossy()).collect::<Vec<_>>(),
+    })
 }
 
 fn collect_system_info(

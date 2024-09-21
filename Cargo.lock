@@ -277,6 +277,7 @@ dependencies = [
  "memchr",
  "ntapi",
  "rayon",
+ "serde",
  "windows",
 ]
 
