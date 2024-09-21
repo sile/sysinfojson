@@ -1,44 +1,114 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, HashSet},
+    time::Duration,
+};
 
 use clap::Parser;
-use orfail::OrFail;
 use sysinfo::{Components, Disks, Networks, System, Users};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, clap::ValueEnum)]
+enum SystemCategory {
+    Cpu,
+    Disk,
+    LoadAvg,
+    Memory,
+    Network,
+    Process,
+    System,
+    Temperature,
+    User,
+}
 
 #[derive(Parser)]
 #[clap(version)]
-struct Args {
-    // enum system {includes}, process {pid}
+enum Args {
+    System {
+        categories: Vec<SystemCategory>,
+
+        #[clap(short='i', long, default_value_t = sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_millis() as u16)]
+        cpu_update_interval_ms: u16,
+    },
+    Process {
+        pid: u32,
+    },
 }
 
-fn main() -> orfail::Result<()> {
-    let _args = Args::parse();
+fn main() {
+    let args = Args::parse();
+    let output = match args {
+        Args::System {
+            categories,
+            cpu_update_interval_ms,
+        } => {
+            let categories = HashSet::from_iter(categories.into_iter());
+            collect_system_info(
+                &categories,
+                Duration::from_millis(cpu_update_interval_ms as u64),
+            )
+        }
+        Args::Process { .. } => todo!(),
+    };
+    println!("{output}");
+}
 
-    let mut sys = System::new_all();
+fn collect_system_info(
+    categories: &HashSet<SystemCategory>,
+    cpu_update_interval: Duration,
+) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+
+    if categories.is_empty()
+        || categories.contains(&SystemCategory::Process)
+        || categories.contains(&SystemCategory::Cpu)
+        || categories.contains(&SystemCategory::Memory)
+    {
+        let mut sys = System::new_all();
+        if categories.is_empty() || categories.contains(&SystemCategory::Cpu) {
+            std::thread::sleep(cpu_update_interval);
+            sys.refresh_cpu_all();
+
+            map.insert("cpu".to_owned(), cpu(&sys));
+        }
+        if categories.is_empty() || categories.contains(&SystemCategory::Process) {
+            map.insert(
+                "process".to_owned(),
+                serde_json::json!( {"process_count": sys.processes().len()}),
+            );
+        }
+        if categories.is_empty() || categories.contains(&SystemCategory::Memory) {
+            map.insert("memory".to_owned(), memory(&sys));
+        }
+    }
+
+    if categories.is_empty() || categories.contains(&SystemCategory::System) {
+        map.insert("system".to_owned(), system());
+    }
+    if categories.is_empty() || categories.contains(&SystemCategory::User) {
+        map.insert("user".to_owned(), user());
+    }
+    if categories.is_empty() || categories.contains(&SystemCategory::Disk) {
+        map.insert("disk".to_owned(), disk());
+    }
+    if categories.is_empty() || categories.contains(&SystemCategory::Network) {
+        map.insert("network".to_owned(), network());
+    }
+    if categories.is_empty() || categories.contains(&SystemCategory::Temperature) {
+        map.insert("temperature".to_owned(), temperature());
+    }
+    if categories.is_empty() || categories.contains(&SystemCategory::LoadAvg) {
+        map.insert("load_avg".to_owned(), load_avg());
+    }
+
+    serde_json::Value::Object(map)
+}
+
+fn load_avg() -> serde_json::Value {
     let load_avg = System::load_average();
-    let json = serde_json::json! ({
-        "system": system(),
-        "boot_time": System::boot_time(),
-        "uptime": System::uptime(),
-        "users": users(),
-        "disks": disks(),
-        "networks": networks(),
-        "temperatures": temperatures(),
-        "load_avg": {
-            "one": load_avg.one,
-            "five": load_avg.five,
-            "fifteen": load_avg.fifteen,
-        },
-        "process_count": sys.processes().len(),
-        "cpus": cpus(&mut sys),
-        "cpu": {
-            "physical_core_count": sys.physical_core_count(),
-            "global_cpu_usage": sys.global_cpu_usage(),
-        },
-        "memory": memory(&sys),
-    });
-    println!("{}", serde_json::to_string(&json).or_fail()?);
-
-    Ok(())
+    serde_json::json! ({
+        "one": load_avg.one,
+        "five": load_avg.five,
+        "fifteen": load_avg.fifteen,
+    })
 }
 
 fn system() -> serde_json::Value {
@@ -48,10 +118,14 @@ fn system() -> serde_json::Value {
         "os_version": System::os_version(),
         "long_os_version": System::long_os_version(),
         "host_name": System::host_name(),
+        "boot_time": System::boot_time(),
+        "cpu_arch": System::cpu_arch(),
+        "distribution_id": System::distribution_id(),
+        "uptime": System::uptime(),
     })
 }
 
-fn users() -> BTreeMap<String, serde_json::Value> {
+fn user() -> serde_json::Value {
     Users::new_with_refreshed_list()
         .into_iter()
         .map(|user| {
@@ -68,7 +142,7 @@ fn users() -> BTreeMap<String, serde_json::Value> {
         .collect()
 }
 
-fn disks() -> BTreeMap<String, serde_json::Value> {
+fn disk() -> serde_json::Value {
     Disks::new_with_refreshed_list()
         .into_iter()
         .map(|disk| {
@@ -87,7 +161,7 @@ fn disks() -> BTreeMap<String, serde_json::Value> {
         .collect()
 }
 
-fn networks() -> BTreeMap<String, serde_json::Value> {
+fn network() -> serde_json::Value {
     Networks::new_with_refreshed_list()
         .into_iter()
         .map(|(interface_name, data)| {
@@ -114,7 +188,7 @@ fn networks() -> BTreeMap<String, serde_json::Value> {
         .collect()
 }
 
-fn temperatures() -> BTreeMap<String, serde_json::Value> {
+fn temperature() -> serde_json::Value {
     Components::new_with_refreshed_list()
         .into_iter()
         .map(|component| {
@@ -130,25 +204,23 @@ fn temperatures() -> BTreeMap<String, serde_json::Value> {
         .collect()
 }
 
-fn cpus(sys: &mut System) -> BTreeMap<String, serde_json::Value> {
-    // TODO:
-    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-    sys.refresh_cpu_all();
-
-    sys.cpus()
-        .into_iter()
-        .map(|cpu| {
-            (
-                cpu.name().to_string(),
+fn cpu(sys: &System) -> serde_json::Value {
+    serde_json::json! ({
+        "physical_core_count": sys.physical_core_count(),
+        "global_cpu_usage": sys.global_cpu_usage(),
+        "cpus": sys.cpus()
+            .into_iter()
+            .map(|cpu| {
                 serde_json::json!({
+                    "name": cpu.name(),
                     "brand": cpu.brand(),
                     "vendor_id": cpu.vendor_id(),
                     "frequency": cpu.frequency(),
                     "cpu_usage": cpu.cpu_usage(),
-                }),
-            )
-        })
-        .collect()
+                })
+            })
+            .collect::<Vec<_>>()
+    })
 }
 
 fn memory(sys: &System) -> serde_json::Value {
