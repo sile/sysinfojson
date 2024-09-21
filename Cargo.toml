@@ -2,6 +2,12 @@
 name = "sysinfojson"
 version = "0.1.0"
 edition = "2021"
+authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+license = "MIT"
+description = "Command-line tool that displays system information collected using `sysinfo` crate in JSON format"
+homepage = "https://github.com/sile/sysinfojson"
+repository = "https://github.com/sile/sysinfojson"
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }
