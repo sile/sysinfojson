@@ -6,29 +6,23 @@ use std::{
 use clap::Parser;
 use sysinfo::{Components, Disks, Networks, Pid, ProcessRefreshKind, RefreshKind, System, Users};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, clap::ValueEnum)]
-enum SystemCategory {
-    Cpu,
-    Disk,
-    LoadAvg,
-    Memory,
-    Network,
-    Process,
-    System,
-    Temperature,
-    User,
-}
-
+/// Command-line tool that displays system information collected using `sysinfo` crate in JSON format.
 #[derive(Parser)]
 #[clap(version)]
 enum Args {
+    /// Displays system information.
     System {
+        /// Categories included in the resulting JSON (if not specified, all categories are included).
         categories: Vec<SystemCategory>,
 
+        /// Waiting time in milliseconds for calculating CPU usage.
         #[clap(short='i', long, default_value_t = sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.as_millis() as u16)]
         cpu_update_interval_ms: u16,
     },
+
+    /// Displays process information.
     Process {
+        /// Identifier of the target process.
         pid: u32,
     },
 }
@@ -49,6 +43,19 @@ fn main() {
         Args::Process { pid } => collect_process_info(pid),
     };
     println!("{output}");
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, clap::ValueEnum)]
+enum SystemCategory {
+    Cpu,
+    Disk,
+    LoadAvg,
+    Memory,
+    Network,
+    Process,
+    System,
+    Temperature,
+    User,
 }
 
 fn collect_process_info(pid: u32) -> serde_json::Value {
