@@ -34,7 +34,7 @@ fn main() {
             categories,
             cpu_update_interval_ms,
         } => {
-            let categories = HashSet::from_iter(categories.into_iter());
+            let categories = HashSet::from_iter(categories);
             collect_system_info(
                 &categories,
                 Duration::from_millis(cpu_update_interval_ms as u64),
@@ -249,7 +249,7 @@ fn cpu(sys: &System) -> serde_json::Value {
         "physical_core_count": sys.physical_core_count(),
         "global_cpu_usage": sys.global_cpu_usage(),
         "cpus": sys.cpus()
-            .into_iter()
+            .iter()
             .map(|cpu| {
                 serde_json::json!({
                     "name": cpu.name(),
